@@ -129,6 +129,18 @@
             transition: all 0.2s ease;
             user-select: none;
             border: 1px solid rgba(255, 255, 255, 0.05);
+            cursor: pointer;
+        }
+        
+        .key:hover {
+            filter: brightness(1.25);
+        }
+        
+        .key.playing {
+            background: #fbbf24 !important;
+            color: #0f172a !important;
+            box-shadow: 0 0 14px rgba(251, 191, 36, 0.7);
+            transform: translateY(-4px);
         }
         
         .accidental-svg {
@@ -194,6 +206,19 @@
                 <input type="checkbox" id="notationToggle" onchange="updateVisualization()"> 
                 Western Notation
             </label>
+        </div>
+        <div>
+            <label for="instrumentSelect">Instrument:</label>
+            <select id="instrumentSelect"></select>
+        </div>
+        <div>
+            <label for="sustainRange">Sustain:
+                <input type="range" id="sustainRange" min="0.5" max="8" step="0.5" value="3">
+                <span id="sustainVal">3.0s</span>
+            </label>
+        </div>
+        <div>
+            <button id="playScaleBtn" onclick="playScale()">▶ Play Scale</button>
         </div>
     </div>
 
@@ -495,6 +520,181 @@
             western: "B"
         }];
 
+
+        // ---------- Audio ----------
+        const C4_FREQ = 261.6256; // root24Midi 0 = C4, 24 steps per octave (quarter-tone)
+        let audioCtx = null;
+        let scaleTimers = [];
+
+        function getAudioCtx() {
+            if (!audioCtx) {
+                audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            return audioCtx;
+        }
+
+        function midi24ToFreq(m) {
+            return C4_FREQ * Math.pow(2, m / 24);
+        }
+
+        const INSTRUMENTS = {
+            organ: {
+                label: "Organ",
+                type: 'triangle',
+                partials: [[1, 1], [2, 0.35], [3, 0.15]],
+                attack: 0.03,
+                sustained: true
+            },
+            piano: {
+                label: "Piano",
+                type: 'sine',
+                partials: [[1, 1], [2, 0.5], [3, 0.25], [4, 0.12], [5, 0.06]],
+                attack: 0.005,
+                sustained: false,
+                filter: [10, 2.5]
+            },
+            oud: {
+                label: "Oud",
+                type: 'sawtooth',
+                partials: [[1, 1], [2, 0.3]],
+                attack: 0.004,
+                sustained: false,
+                filter: [7, 1.5]
+            },
+            qanun: {
+                label: "Qanun",
+                type: 'triangle',
+                partials: [[1, 1], [2, 0.6], [3, 0.4], [4, 0.2]],
+                attack: 0.003,
+                sustained: false,
+                filter: [9, 2]
+            },
+            ney: {
+                label: "Ney (flute)",
+                type: 'sine',
+                partials: [[1, 1], [2, 0.12], [3, 0.05]],
+                attack: 0.09,
+                sustained: true,
+                vibrato: [5, 10]
+            },
+            violin: {
+                label: "Violin / Strings",
+                type: 'sawtooth',
+                partials: [[1, 1]],
+                attack: 0.15,
+                sustained: true,
+                filter: [5, 5],
+                vibrato: [5.5, 14]
+            },
+            pad: {
+                label: "Soft Pad",
+                type: 'sine',
+                partials: [[1, 1], [2, 0.4], [0.5, 0.3]],
+                attack: 0.25,
+                sustained: true,
+                vibrato: [4, 5]
+            },
+            bell: {
+                label: "Bell",
+                type: 'sine',
+                partials: [[1, 1], [2.76, 0.4], [5.4, 0.2]],
+                attack: 0.002,
+                sustained: false
+            }
+        };
+
+        const instrumentSelect = document.getElementById('instrumentSelect');
+        const sustainRange = document.getElementById('sustainRange');
+        for (const k in INSTRUMENTS) {
+            const o = document.createElement('option');
+            o.value = k;
+            o.textContent = INSTRUMENTS[k].label;
+            instrumentSelect.appendChild(o);
+        }
+        sustainRange.addEventListener('input', () => {
+            document.getElementById('sustainVal').textContent = parseFloat(sustainRange.value).toFixed(1) + 's';
+        });
+
+        function playTone(freq, duration) {
+            duration = duration || parseFloat(sustainRange.value);
+            const inst = INSTRUMENTS[instrumentSelect.value] || INSTRUMENTS.organ;
+            const ctx = getAudioCtx();
+            const now = ctx.currentTime;
+            const end = now + duration;
+            const peak = 0.32;
+            const total = inst.partials.reduce((a, p) => a + p[1], 0);
+
+            const master = ctx.createGain();
+            master.gain.setValueAtTime(0.0001, now);
+            master.gain.exponentialRampToValueAtTime(peak, now + inst.attack);
+            if (inst.sustained) {
+                const rel = Math.min(0.5, duration * 0.3);
+                master.gain.setValueAtTime(peak * 0.85, Math.max(now + inst.attack + 0.01, end - rel));
+                master.gain.exponentialRampToValueAtTime(0.0001, end);
+            } else {
+                master.gain.exponentialRampToValueAtTime(0.0001, end); // long natural ring-out
+            }
+
+            let out = master;
+            if (inst.filter) {
+                const lp = ctx.createBiquadFilter();
+                lp.type = 'lowpass';
+                lp.frequency.setValueAtTime(Math.min(freq * inst.filter[0], 12000), now);
+                lp.frequency.exponentialRampToValueAtTime(Math.max(freq * inst.filter[1], 200), end);
+                lp.connect(master);
+                out = lp;
+            }
+            master.connect(ctx.destination);
+
+            let lfo = null,
+                lfoGain = null;
+            if (inst.vibrato) {
+                lfo = ctx.createOscillator();
+                lfoGain = ctx.createGain();
+                lfo.frequency.value = inst.vibrato[0];
+                lfoGain.gain.setValueAtTime(0, now);
+                lfoGain.gain.linearRampToValueAtTime(inst.vibrato[1], now + 0.4); // cents, fades in
+                lfo.connect(lfoGain);
+                lfo.start(now);
+                lfo.stop(end + 0.1);
+            }
+
+            inst.partials.forEach(([mult, amp]) => {
+                const osc = ctx.createOscillator();
+                const g = ctx.createGain();
+                osc.type = inst.type;
+                osc.frequency.value = freq * mult;
+                g.gain.value = amp / total;
+                if (lfoGain) lfoGain.connect(osc.detune);
+                osc.connect(g);
+                g.connect(out);
+                osc.start(now);
+                osc.stop(end + 0.1);
+            });
+        }
+
+        function flashKey(el, ms = 500) {
+            if (!el) return;
+            el.classList.add('playing');
+            setTimeout(() => el.classList.remove('playing'), ms);
+        }
+
+        function playKey(el) {
+            playTone(midi24ToFreq(parseInt(el.dataset.midi, 10)));
+            flashKey(el);
+        }
+
+        function playScale() {
+            scaleTimers.forEach(clearTimeout);
+            scaleTimers = [];
+            const keys = [...document.querySelectorAll('.key.active-root, .key.active-note')];
+            const seq = keys.concat(keys.slice(0, -1).reverse()); // up, then back down
+            seq.forEach((el, i) => {
+                scaleTimers.push(setTimeout(() => playKey(el), i * 500));
+            });
+        }
+
         function stepsToIntervals(steps) {
             let current = 0;
             let intervals = [0];
@@ -650,6 +850,8 @@
 
                 div.className = `key ${isAccidental ? 'accidental' : 'natural'}`;
                 div.id = `key-${offset}`;
+                div.dataset.midi = midi;
+                div.addEventListener('click', () => playKey(div));
 
                 if (scaleSpellingMap.hasOwnProperty(offset)) {
                     let spell = scaleSpellingMap[offset];
