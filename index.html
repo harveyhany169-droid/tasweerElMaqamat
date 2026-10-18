@@ -213,8 +213,8 @@
         </div>
         <div>
             <label for="sustainRange">Sustain:
-                <input type="range" id="sustainRange" min="0.5" max="8" step="0.5" value="3">
-                <span id="sustainVal">3.0s</span>
+                <input type="range" id="sustainRange" min="0.5" max="3" step="0.5" value="1">
+                <span id="sustainVal">1.0s</span>
             </label>
         </div>
         <div>
@@ -539,25 +539,41 @@
         }
 
         const INSTRUMENTS = {
-            organ: {
-                label: "Organ",
-                type: 'triangle',
-                partials: [[1, 1], [2, 0.35], [3, 0.15]],
-                attack: 0.03,
-                sustained: true
-            },
+
             piano: {
                 label: "Piano",
                 type: 'sine',
-                partials: [[1, 1], [2, 0.5], [3, 0.25], [4, 0.12], [5, 0.06]],
+                partials: [
+                    [1, 1],
+                    [2, 0.5],
+                    [3, 0.25],
+                    [4, 0.12],
+                    [5, 0.06]
+                ],
                 attack: 0.005,
                 sustained: false,
                 filter: [10, 2.5]
             },
+
+            organ: {
+                label: "Organ",
+                type: 'triangle',
+                partials: [
+                    [1, 1],
+                    [2, 0.35],
+                    [3, 0.15]
+                ],
+                attack: 0.03,
+                sustained: true
+            },
+
             oud: {
                 label: "Oud",
                 type: 'sawtooth',
-                partials: [[1, 1], [2, 0.3]],
+                partials: [
+                    [1, 1],
+                    [2, 0.3]
+                ],
                 attack: 0.004,
                 sustained: false,
                 filter: [7, 1.5]
@@ -565,7 +581,12 @@
             qanun: {
                 label: "Qanun",
                 type: 'triangle',
-                partials: [[1, 1], [2, 0.6], [3, 0.4], [4, 0.2]],
+                partials: [
+                    [1, 1],
+                    [2, 0.6],
+                    [3, 0.4],
+                    [4, 0.2]
+                ],
                 attack: 0.003,
                 sustained: false,
                 filter: [9, 2]
@@ -573,7 +594,11 @@
             ney: {
                 label: "Ney (flute)",
                 type: 'sine',
-                partials: [[1, 1], [2, 0.12], [3, 0.05]],
+                partials: [
+                    [1, 1],
+                    [2, 0.12],
+                    [3, 0.05]
+                ],
                 attack: 0.09,
                 sustained: true,
                 vibrato: [5, 10]
@@ -581,7 +606,9 @@
             violin: {
                 label: "Violin / Strings",
                 type: 'sawtooth',
-                partials: [[1, 1]],
+                partials: [
+                    [1, 1]
+                ],
                 attack: 0.15,
                 sustained: true,
                 filter: [5, 5],
@@ -590,7 +617,11 @@
             pad: {
                 label: "Soft Pad",
                 type: 'sine',
-                partials: [[1, 1], [2, 0.4], [0.5, 0.3]],
+                partials: [
+                    [1, 1],
+                    [2, 0.4],
+                    [0.5, 0.3]
+                ],
                 attack: 0.25,
                 sustained: true,
                 vibrato: [4, 5]
@@ -598,7 +629,11 @@
             bell: {
                 label: "Bell",
                 type: 'sine',
-                partials: [[1, 1], [2.76, 0.4], [5.4, 0.2]],
+                partials: [
+                    [1, 1],
+                    [2.76, 0.4],
+                    [5.4, 0.2]
+                ],
                 attack: 0.002,
                 sustained: false
             }
@@ -618,7 +653,7 @@
 
         function playTone(freq, duration) {
             duration = duration || parseFloat(sustainRange.value);
-            const inst = INSTRUMENTS[instrumentSelect.value] || INSTRUMENTS.organ;
+            const inst = INSTRUMENTS[instrumentSelect.value] || INSTRUMENTS.piano;
             const ctx = getAudioCtx();
             const now = ctx.currentTime;
             const end = now + duration;
