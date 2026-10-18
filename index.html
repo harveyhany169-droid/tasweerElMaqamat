@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Maqam & Scale Transposer</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: #0f172a;
+            color: #f8fafc;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        h1 {
+            margin-bottom: 5px;
+            color: #38bdf8;
+            font-size: 1.5rem;
+        }
+        
+        p.subtitle {
+            color: #94a3b8;
+            margin-top: 0;
+            font-size: 0.9rem;
+            margin-bottom: 25px;
+        }
+        
+        .control-panel {
+            background: #1e293b;
+            padding: 15px 25px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+            display: flex;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        select,
+        button {
+            background: #0f172a;
+            color: #fff;
+            border: 1px solid #475569;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+        
+        select:focus,
+        button:focus {
+            outline: 2px solid #38bdf8;
+        }
+        
+        .stage {
+            position: relative;
+            width: 100%;
+            max-width: 1100px;
+            background: #1e293b;
+            border-radius: 16px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.4);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            padding-top: 65px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        
+        #arch-svg {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+        
+        .scale-header {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            right: 0;
+            text-align: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: #fbbf24;
+            letter-spacing: 1px;
+            z-index: 3;
+        }
+        
+        .keyboard-strip {
+            display: flex;
+            gap: 4px;
+            width: 100%;
+            z-index: 2;
+            margin-top: 50px;
+            margin-bottom: 5px;
+        }
+        
+        .key {
+            flex: 1;
+            height: 54px;
+            background: #334155;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: #94a3b8;
+            transition: all 0.2s ease;
+            user-select: none;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        .accidental-svg {
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 2px;
+            fill: currentColor;
+        }
+        
+        .key.accidental {
+            background: #1e293b;
+            color: #64748b;
+        }
+        
+        .key.active-root {
+            background: #ef4444 !important;
+            color: #fff !important;
+            box-shadow: 0 0 12px rgba(239, 68, 68, 0.6);
+            transform: translateY(-3px);
+        }
+        
+        .key.active-note {
+            background: #10b981 !important;
+            color: #fff !important;
+            box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
+            transform: translateY(-2px);
+        }
+        
+        .arc-label {
+            font-size: 13px;
+            font-weight: bold;
+            fill: #cbd5e1;
+            text-anchor: middle;
+        }
+    </style>
+</head>
+
+<body>
+
+    <h1>Maqam & Scale Transposer</h1>
+
+    <div class="control-panel">
+        <div>
+            <label for="scaleSelect">Scale / Maqam:</label>
+            <select id="scaleSelect" onchange="updateVisualization()">
+                <!-- Populated dynamically -->
+            </select>
+        </div>
+        <div>
+            <label for="rootSelect">Root Note:</label>
+            <select id="rootSelect" onchange="updateVisualization()">
+                <!-- Populated dynamically -->
+            </select>
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="quarterRootToggle" onchange="onQuarterRootToggle()"> 
+                Show Quarter-Tone Roots
+            </label>
+        </div>
+        <div>
+            <label>
+                <input type="checkbox" id="notationToggle" onchange="updateVisualization()"> 
+                Western Notation
+            </label>
+        </div>
+    </div>
+
+    <div class="stage">
+        <div class="scale-header" id="displayHeader">MAJOR / AJAM - عجم (Do)</div>
+        <svg id="arch-svg"></svg>
+        <div class="keyboard-strip" id="keyboardStrip"></div>
+    </div>
+
+    <script>
+        const diatonicLetters = [{
+            solfege: "Do",
+            western: "C"
+        }, {
+            solfege: "Re",
+            western: "D"
+        }, {
+            solfege: "Mi",
+            western: "E"
+        }, {
+            solfege: "Fa",
+            western: "F"
+        }, {
+            solfege: "Sol",
+            western: "G"
+        }, {
+            solfege: "La",
+            western: "A"
+        }, {
+            solfege: "Si",
+            western: "B"
+        }];
+
+        const base24MidiMap = {
+            0: 0,
+            1: 4,
+            2: 8,
+            3: 10,
+            4: 14,
+            5: 18,
+            6: 22
+        };
+
+        const HALF_FLAT_SVG = `<svg class="accidental-svg" width="10" height="16" viewBox="0 0 10 16"><path d="M 8 2 L 8 14 M 8 8 C 4 6 2 9 8 13 Z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+        const HALF_SHARP_SVG = `<svg class="accidental-svg" width="12" height="16" viewBox="0 0 12 16"><path d="M 4 1 L 4 15 M 8 1 L 8 15 M 1 8 L 11 8" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+
+        const universalRoots = [{
+            solfege: "Do",
+            western: "C",
+            rootLetterIdx: 0,
+            root24Midi: 0
+        }, {
+            solfege: "Do𝄲",
+            western: "C𝄲",
+            rootLetterIdx: 0,
+            root24Midi: 1
+        }, {
+            solfege: "Do♯",
+            western: "C♯",
+            rootLetterIdx: 0,
+            root24Midi: 2
+        }, {
+            solfege: "Re𝄳",
+            western: "D𝄳",
+            rootLetterIdx: 1,
+            root24Midi: 3
+        }, {
+            solfege: "Re",
+            western: "D",
+            rootLetterIdx: 1,
+            root24Midi: 4
+        }, {
+            solfege: "Re𝄲",
+            western: "D𝄲",
+            rootLetterIdx: 1,
+            root24Midi: 5
+        }, {
+            solfege: "Mi♭",
+            western: "E♭",
+            rootLetterIdx: 2,
+            root24Midi: 6
+        }, {
+            solfege: "Mi𝄳",
+            western: "E𝄳",
+            rootLetterIdx: 2,
+            root24Midi: 7
+        }, {
+            solfege: "Mi",
+            western: "E",
+            rootLetterIdx: 2,
+            root24Midi: 8
+        }, {
+            solfege: "Fa𝄲",
+            western: "F𝄲",
+            rootLetterIdx: 3,
+            root24Midi: 9
+        }, {
+            solfege: "Fa",
+            western: "F",
+            rootLetterIdx: 3,
+            root24Midi: 10
+        }, {
+            solfege: "Fa𝄲",
+            western: "F𝄲",
+            rootLetterIdx: 3,
+            root24Midi: 11
+        }, {
+            solfege: "Fa♯",
+            western: "F♯",
+            rootLetterIdx: 3,
+            root24Midi: 12
+        }, {
+            solfege: "Sol𝄳",
+            western: "G𝄳",
+            rootLetterIdx: 4,
+            root24Midi: 13
+        }, {
+            solfege: "Sol",
+            western: "G",
+            rootLetterIdx: 4,
+            root24Midi: 14
+        }, {
+            solfege: "Sol𝄲",
+            western: "G𝄲",
+            rootLetterIdx: 4,
+            root24Midi: 15
+        }, {
+            solfege: "La♭",
+            western: "A♭",
+            rootLetterIdx: 5,
+            root24Midi: 16
+        }, {
+            solfege: "La𝄳",
+            western: "A𝄳",
+            rootLetterIdx: 5,
+            root24Midi: 17
+        }, {
+            solfege: "La",
+            western: "A",
+            rootLetterIdx: 5,
+            root24Midi: 18
+        }, {
+            solfege: "La𝄲",
+            western: "A𝄲",
+            rootLetterIdx: 5,
+            root24Midi: 19
+        }, {
+            solfege: "Si♭",
+            western: "B♭",
+            rootLetterIdx: 6,
+            root24Midi: 20
+        }, {
+            solfege: "Si𝄳",
+            western: "B𝄳",
+            rootLetterIdx: 6,
+            root24Midi: 21
+        }, {
+            solfege: "Si",
+            western: "B",
+            rootLetterIdx: 6,
+            root24Midi: 22
+        }, {
+            solfege: "Do𝄲",
+            western: "C𝄲",
+            rootLetterIdx: 0,
+            root24Midi: 23
+        }];
+
+        const scales = {
+            major: {
+                name: "MAJOR / AJAM - عجم",
+                steps: [1, 1, 0.5, 1, 1, 1, 0.5]
+            },
+            minor: {
+                name: "MINOR / NHAWAND - نهاوند",
+                steps: [1, 0.5, 1, 1, 0.5, 1, 1]
+            },
+            kurd: {
+                name: "KURD - كرد",
+                steps: [0.5, 1, 1, 1, 0.5, 1, 1]
+            },
+            hijaz: {
+                name: "HIJAZ - حجاز",
+                steps: [0.5, 1.5, 0.5, 1, 0.5, 1, 1]
+            },
+            rast: {
+                name: "RAST - راست",
+                steps: [1, 0.75, 0.75, 1, 1, 0.75, 0.75]
+            },
+            bayaty: {
+                name: "BAYATY  بياتي",
+                steps: [0.75, 0.75, 1, 1, 0.5, 1, 1]
+            },
+            bayatiShuri: {
+                name: "BAYATI SHURI - بياتي شوري",
+                steps: [0.75, 0.75, 1, 0.5, 1.5, 0.5, 1]
+            },
+            hussayni: {
+                name: "HUSSAYNI - حسيني",
+                steps: [0.75, 0.75, 1, 1, 0.75, 0.75, 1]
+            },
+            saba: {
+                name: "SABA - صبا",
+                steps: [0.75, 0.75, 0.5, 1.5, 0.5, 1, 0.5]
+            },
+            sabaZamzam: {
+                name: "SABA ZAMZAM - صبا زمزم",
+                steps: [0.5, 1, 0.5, 1.5, 0.5, 1, 0.5]
+            },
+            sika: {
+                name: "SIKA - سيكا",
+                steps: [0.75, 1, 1, 0.75, 0.75, 1, 0.75]
+            },
+            hozam: {
+                name: "HOZAM - هزام",
+                steps: [0.75, 1, 0.5, 1.5, 0.5, 1, 0.75]
+            },
+            rahatAlArwah: {
+                name: "RAHAT ALARWAH - راحة الأرواح",
+                steps: [0.75, 1, 0.5, 1.5, 0.5, 1, 0.75]
+            },
+            suznak: {
+                name: "SUZNAK - سوزناك",
+                steps: [1, 0.75, 0.75, 1, 0.5, 1.5, 0.5]
+            },
+            nairuz: {
+                name: "NAIRUZ - نيروز",
+                steps: [1, 0.75, 0.75, 1, 0.75, 0.75, 1]
+            },
+            yakah: {
+                name: "YAKAH - يكاه",
+                steps: [1, 0.75, 0.75, 1, 0.75, 0.75, 1]
+            },
+            iraq: {
+                name: "IRAQ - عراق",
+                steps: [0.75, 1, 0.75, 0.75, 1, 0.75, 1]
+            },
+            atharKurd: {
+                name: "ATHAR KURD - أثر كرد",
+                steps: [0.5, 1, 1.5, 0.5, 0.5, 1.5, 0.5]
+            },
+            hijazkar: {
+                name: "HIJAZKAR - حجاز كار",
+                steps: [0.5, 1.5, 0.5, 1, 0.5, 1.5, 0.5]
+            },
+            shadAraban: {
+                name: "SHAD ARABAN - شد عربان",
+                steps: [0.5, 1.5, 0.5, 1, 0.5, 1.5, 0.5]
+            },
+            nawaAthar: {
+                name: "NAWA ATHAR - نوى أثر",
+                steps: [1, 0.5, 1.5, 0.5, 0.5, 1.5, 0.5]
+            },
+            shawqAfza: {
+                name: "SHAWQ AFZA - شوق أفزا",
+                steps: [1, 1, 0.5, 1, 0.5, 1.5, 0.5]
+            },
+            bastanikar: {
+                name: "BASTANIKAR - بستانيكار",
+                steps: [0.75, 0.25, 0.5, 1, 0.5, 1.5, 0.5, 1, 0.5, 1.5, 0.5]
+            }
+        };
+
+        const standardChromaticMap12 = [{
+            solfege: "Do",
+            western: "C"
+        }, {
+            solfege: "Do♯",
+            western: "C♯"
+        }, {
+            solfege: "Re",
+            western: "D"
+        }, {
+            solfege: "Mi♭",
+            western: "E♭"
+        }, {
+            solfege: "Mi",
+            western: "E"
+        }, {
+            solfege: "Fa",
+            western: "F"
+        }, {
+            solfege: "Fa♯",
+            western: "F♯"
+        }, {
+            solfege: "Sol",
+            western: "G"
+        }, {
+            solfege: "La♭",
+            western: "A♭"
+        }, {
+            solfege: "La",
+            western: "A"
+        }, {
+            solfege: "Si♭",
+            western: "B♭"
+        }, {
+            solfege: "Si",
+            western: "B"
+        }];
+
+        function stepsToIntervals(steps) {
+            let current = 0;
+            let intervals = [0];
+            for (let i = 0; i < steps.length; i++) {
+                current += Math.round(steps[i] * 4);
+                intervals.push(current);
+            }
+            return intervals;
+        }
+
+        const scaleSelect = document.getElementById('scaleSelect');
+        const rootSelect = document.getElementById('rootSelect');
+        const isWestern = () => document.getElementById('notationToggle').checked;
+        const showQuarterRoots = () => document.getElementById('quarterRootToggle').checked;
+
+        function formatAccidentalHTML(letterName, accidentalType) {
+            if (accidentalType === "HALF_FLAT") {
+                return letterName + HALF_FLAT_SVG;
+            } else if (accidentalType === "HALF_SHARP") {
+                return letterName + HALF_SHARP_SVG;
+            }
+            return letterName + accidentalType;
+        }
+
+        function initDropdowns() {
+            scaleSelect.innerHTML = '';
+            for (let key in scales) {
+                let opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = scales[key].name;
+                scaleSelect.appendChild(opt);
+            }
+
+            updateRootDropdownLabels();
+            rootSelect.value = 0; // Default to Do (C)
+        }
+
+        function updateRootDropdownLabels() {
+            const currentVal = rootSelect.value;
+            const includeQuarter = showQuarterRoots();
+
+            rootSelect.innerHTML = '';
+            let validSelectionFound = false;
+
+            universalRoots.forEach((r, idx) => {
+                if (!includeQuarter && r.root24Midi % 2 !== 0) return;
+
+                let opt = document.createElement('option');
+                opt.value = idx;
+                opt.textContent = isWestern() ? r.western : r.solfege;
+                rootSelect.appendChild(opt);
+
+                if (idx.toString() === currentVal.toString()) {
+                    validSelectionFound = true;
+                }
+            });
+
+            if (validSelectionFound) {
+                rootSelect.value = currentVal;
+            } else {
+                rootSelect.selectedIndex = 0;
+            }
+        }
+
+        function onQuarterRootToggle() {
+            updateRootDropdownLabels();
+            updateVisualization();
+        }
+
+        document.getElementById('notationToggle').addEventListener('change', () => {
+            updateRootDropdownLabels();
+            updateVisualization();
+        });
+
+        function computeScaleSpelling(rootObj, scaleIntervals, useWestern) {
+            let spellings = {};
+            let startLetterIdx = rootObj.rootLetterIdx;
+
+            for (let step = 0; step < scaleIntervals.length; step++) {
+                let currentLetterIdx = (startLetterIdx + step) % 7;
+                let letterData = diatonicLetters[currentLetterIdx];
+                let letterName = useWestern ? letterData.western : letterData.solfege;
+
+                let targetPitch = (rootObj.root24Midi + scaleIntervals[step]) % 24;
+                let basePitch = base24MidiMap[currentLetterIdx];
+                let diff = (targetPitch - basePitch + 24) % 24;
+
+                let accidentalType = "";
+                if (diff === 1) accidentalType = "HALF_SHARP";
+                else if (diff === 2) accidentalType = "♯";
+                else if (diff === 3) accidentalType = "♯HALF_SHARP";
+                else if (diff === 23) accidentalType = "HALF_FLAT";
+                else if (diff === 22) accidentalType = "♭";
+                else if (diff === 21) accidentalType = "HALF_FLAT";
+
+                spellings[scaleIntervals[step]] = {
+                    letterName,
+                    accidentalType
+                };
+            }
+
+            return spellings;
+        }
+
+        function formatQuarterToneLabel(quarterTones) {
+            let whole = Math.floor(quarterTones / 4);
+            let rem = quarterTones % 4;
+
+            let fraction = "";
+            if (rem === 1) fraction = "¼";
+            else if (rem === 2) fraction = "½";
+            else if (rem === 3) fraction = "¾";
+
+            if (whole > 0 && fraction !== "") return whole + fraction;
+            if (whole > 0) return whole.toString();
+            if (fraction !== "") return fraction;
+            return "0";
+        }
+
+        function updateVisualization() {
+            const scaleKey = scaleSelect.value;
+            const scaleData = scales[scaleKey];
+            const scaleIntervals = stepsToIntervals(scaleData.steps);
+            const totalSpanQT = scaleIntervals[scaleIntervals.length - 1];
+
+            const rootObj = universalRoots[rootSelect.value] || universalRoots[0];
+            const useWestern = isWestern();
+
+            document.getElementById('displayHeader').textContent = `${scaleData.name} (${useWestern ? rootObj.western : rootObj.solfege})`;
+
+            const scaleSpellingMap = computeScaleSpelling(rootObj, scaleIntervals, useWestern);
+            const strip = document.getElementById('keyboardStrip');
+            strip.innerHTML = '';
+
+            let scaleOffsetSet = new Set(scaleIntervals);
+
+            let pitchOffsets = [];
+            for (let s = 0; s <= Math.ceil(totalSpanQT / 2); s++) {
+                pitchOffsets.push(s * 2);
+            }
+            scaleIntervals.forEach(iv => {
+                if (!pitchOffsets.includes(iv)) {
+                    pitchOffsets.push(iv);
+                }
+            });
+            pitchOffsets.sort((a, b) => a - b);
+
+            pitchOffsets.forEach(offset => {
+                let midi = rootObj.root24Midi + offset;
+                let pitchClass = midi % 24;
+                let div = document.createElement('div');
+                let isAccidental = (pitchClass % 2 !== 0);
+
+                div.className = `key ${isAccidental ? 'accidental' : 'natural'}`;
+                div.id = `key-${offset}`;
+
+                if (scaleSpellingMap.hasOwnProperty(offset)) {
+                    let spell = scaleSpellingMap[offset];
+                    div.innerHTML = formatAccidentalHTML(spell.letterName, spell.accidentalType);
+                } else {
+                    let semitoneIdx = Math.round(pitchClass / 2) % 12;
+                    let mapObj = standardChromaticMap12[semitoneIdx];
+                    div.textContent = useWestern ? mapObj.western : mapObj.solfege;
+                }
+
+                if (offset === 0) {
+                    div.classList.add('active-root');
+                } else if (offset === totalSpanQT) {
+                    div.classList.add('active-note');
+                } else if (scaleOffsetSet.has(offset)) {
+                    div.classList.add('active-note');
+                }
+
+                strip.appendChild(div);
+            });
+
+            drawArches(scaleIntervals, scaleData.steps);
+        }
+
+        function drawArches(indices, steps) {
+            const svg = document.getElementById('arch-svg');
+            svg.innerHTML = '';
+
+            const stageRect = document.querySelector('.stage').getBoundingClientRect();
+
+            for (let i = 0; i < indices.length - 1; i++) {
+                let startKey = document.getElementById(`key-${indices[i]}`);
+                let endKey = document.getElementById(`key-${indices[i+1]}`);
+
+                if (startKey && endKey) {
+                    let r1 = startKey.getBoundingClientRect();
+                    let r2 = endKey.getBoundingClientRect();
+
+                    let x1 = (r1.left + r1.width / 2) - stageRect.left;
+                    let x2 = (r2.left + r2.width / 2) - stageRect.left;
+                    let yBaseline = (r1.top) - stageRect.top - 4;
+
+                    let archHeight = 34;
+
+                    let path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                    let d = `M ${x1} ${yBaseline} Q ${(x1 + x2) / 2} ${yBaseline - archHeight} ${x2} ${yBaseline}`;
+                    path.setAttribute("d", d);
+                    path.setAttribute("fill", "none");
+                    path.setAttribute("stroke", i === 0 ? "#ef4444" : "#38bdf8");
+                    path.setAttribute("stroke-width", "3.5");
+                    path.setAttribute("stroke-linecap", "round");
+                    svg.appendChild(path);
+
+                    let diffQT = Math.round(steps[i] * 4);
+                    let labelText = formatQuarterToneLabel(diffQT);
+
+                    let text = document.createElementNS("http://www.w3.org/2000/svg", "text");
+                    text.setAttribute("x", (x1 + x2) / 2);
+                    text.setAttribute("y", yBaseline - archHeight - 5);
+                    text.setAttribute("class", "arc-label");
+                    text.textContent = labelText;
+                    svg.appendChild(text);
+                }
+            }
+        }
+
+        initDropdowns();
+        updateVisualization();
+
+        window.onresize = updateVisualization;
+    </script>
+</body>
+
+</html>
